@@ -120,6 +120,7 @@ while ($x -lt ($w - 2)) {
 
 if ($cols.Count -eq 0) { Write-Warning 'catrix: no rain columns created (check terminal size)'; return }
 $paused = $false
+$script:frame = 0
 $started = [DateTime]::UtcNow
 function Set-Pos([int]$x, [int]$y) { try { [Console]::SetCursorPosition($x, $y) } catch {} }
 function Set-Cursor([bool]$v) { try { [Console]::CursorVisible = $v } catch {} }
@@ -143,6 +144,7 @@ try {
       elseif ($k.VirtualKeyCode -eq 3) { break }  # Ctrl+C delivered as key
     }
     if ($paused) { Start-Sleep -Milliseconds 50; continue }
+    $sb = [Text.StringBuilder]::new(8192)
     foreach ($c in $cols) {
       $c.Tick++
       if ($c.Tick -lt $c.Speed) { continue }
@@ -150,8 +152,8 @@ try {
       while ($c.Trail.Count -gt 7) {
         $old = $c.Trail[0]; $c.Trail.RemoveAt(0)
         if ($old.Y -ge 0 -and $old.Y -lt $h) {
-          Set-Pos $c.X $old.Y
-          Write-Host (' ' * ($old.Face.Length + 4)) -NoNewline
+          [void]$sb.Append("$esc[$($old.Y + 1);$($c.X + 1)H")
+          [void]$sb.Append((' ' * ($old.Face.Length + 4)))
         }
       }
       $c.Y++
@@ -160,16 +162,17 @@ try {
       if ($c.Trail.Count -gt 0) {
         $prev = $c.Trail[$c.Trail.Count - 1]
         if ($prev.Y -ge 0 -and $prev.Y -lt $h) {
-          Set-Pos $c.X $prev.Y
-          Write-Host "$(Get-BodyAttr)$($prev.Face)$reset" -NoNewline
+          [void]$sb.Append("$esc[$($prev.Y + 1);$($c.X + 1)H$(Get-BodyAttr)$($prev.Face)$reset")
         }
       }
       if ($c.Y -ge 0 -and $c.Y -lt $h) {
-        Set-Pos $c.X $c.Y
-        Write-Host "$(Get-HeadAttr)$face$reset" -NoNewline
+        [void]$sb.Append("$esc[$($c.Y + 1);$($c.X + 1)H$(Get-HeadAttr)$face$reset")
       }
       $null = $c.Trail.Add([PSCustomObject]@{ Y = $c.Y; Face = $face })
     }
+    try { Write-Host $sb.ToString() -NoNewline } catch { Write-Error "catrix draw failed: $_"; break }
+    $script:frame = [int]$script:frame + 1
+    try { $Host.UI.RawUI.WindowTitle = "catrix frame $script:frame" } catch {}
     Start-Sleep -Milliseconds $Delay
   }
 }
