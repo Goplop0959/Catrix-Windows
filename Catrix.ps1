@@ -18,11 +18,16 @@ param(
   [int]$Density = 70,
   [int]$Seconds = 0,
   [switch]$Update,
-  [switch]$Diag
+  [switch]$Diag,
+  [switch]$ShowVersion
 )
 
-$Version = '1.0.0'
+$Version = '1.1.0'
 $InstallUrl = 'https://raw.githubusercontent.com/Goplop0959/Catrix-Windows/refs/heads/master/Install.ps1'
+$esc = [char]27
+$reset = "$esc[0m"
+
+if ($ShowVersion) { Write-Host "catrix $Version"; return }
 
 $Faces = @(
   '(≽^•˕•^≼)',
@@ -92,13 +97,37 @@ if ($Delay -lt 1) { $Delay = 1 }
 if ($Density -gt 100) { $Density = 100 }
 if ($Density -lt 0) { $Density = 0 }
 
-$esc = [char]27
-$reset = "$esc[0m"
 $code = $Codes[$Color]
 $boldOn = -not $NoBold
 function Get-HeadAttr { if ($script:boldOn) { "$esc[1;${script:code}m" } else { "$esc[${script:code}m" } }
 function Get-BodyAttr { "$esc[${script:code}m" }
 $ci = [Array]::IndexOf($Order, $Color)
+function Get-CellWidth([string]$s) {
+  # Terminal cell width the PS1-native way: text elements, combining
+  # marks (Mn/Me) take 0 cells, East-Asian wide/fullwidth take 2.
+  $w = 0
+  $en = [Globalization.StringInfo]::GetTextElementEnumerator($s)
+  while ($en.MoveNext()) {
+    $el = $en.GetTextElement()
+    try {
+      $cat = [Globalization.CharUnicodeInfo]::GetUnicodeCategory($el, 0)
+      if ($cat -eq 'NonSpacingMark' -or $cat -eq 'EnclosingMark') { continue }
+      $code = [char]::ConvertToUtf32($el, 0)
+      if (($code -ge 0x1100 -and $code -le 0x115F) -or $code -eq 0x2329 -or $code -eq 0x232A -or `
+          ($code -ge 0x2E80 -and $code -le 0x303E) -or ($code -ge 0x3041 -and $code -le 0x33FF) -or `
+          ($code -ge 0x3400 -and $code -le 0x4DBF) -or ($code -ge 0x4E00 -and $code -le 0x9FFF) -or `
+          ($code -ge 0xA000 -and $code -le 0xA4CF) -or ($code -ge 0xAC00 -and $code -le 0xD7A3) -or `
+          ($code -ge 0xF900 -and $code -le 0xFAFF) -or ($code -ge 0xFE10 -and $code -le 0xFE1F) -or `
+          ($code -ge 0xFE30 -and $code -le 0xFE4F) -or ($code -ge 0xFF00 -and $code -le 0xFF60) -or `
+          ($code -ge 0xFFE0 -and $code -le 0xFFE6) -or ($code -ge 0x1F300 -and $code -le 0x1FAFF) -or `
+          ($code -ge 0x20000 -and $code -le 0x3FFFD)) { $w += 2 } else { $w += 1 }
+    } catch { $w += 1 }
+  }
+  return $w
+}
+$FaceW = @{}
+$MaxW = 0
+foreach ($f in $Faces) { $ww = Get-CellWidth $f; $FaceW[$f] = $ww; if ($ww -gt $MaxW) { $MaxW = $ww } }
 
 $raw = $Host.UI.RawUI
 $w = $raw.WindowSize.Width
@@ -115,7 +144,7 @@ while ($x -lt ($w - 2)) {
       Tick = 0; Trail = [Collections.ArrayList]::new()
     })
   }
-  $x += $rng.Next(5, 12)
+  $x += $MaxW + 2 + $rng.Next(0, 4)
 }
 
 if ($cols.Count -eq 0) { Write-Warning 'catrix: no rain columns created (check terminal size)'; return }
@@ -181,6 +210,8 @@ try {
       elseif ($ch -eq 'b' -or $ch -eq 'B') { $script:boldOn = -not $script:boldOn }
     }
     if ($paused) { Start-Sleep -Milliseconds 50; continue }
+    $headAttr = if ($script:boldOn) { "$esc[1;${script:code}m" } else { "$esc[${script:code}m" }
+    $bodyAttr = "$esc[${script:code}m"
     $sb = [Text.StringBuilder]::new(8192)
     foreach ($c in $cols) {
       $c.Tick++
@@ -190,7 +221,7 @@ try {
         $old = $c.Trail[0]; $c.Trail.RemoveAt(0)
         if ($old.Y -ge 0 -and $old.Y -lt $h) {
           [void]$sb.Append("$esc[$($old.Y + 1);$($c.X + 1)H")
-          [void]$sb.Append((' ' * ($old.Face.Length + 4)))
+          [void]$sb.Append((' ' * $FaceW[$old.Face]))
         }
       }
       $c.Y++
@@ -199,11 +230,11 @@ try {
       if ($c.Trail.Count -gt 0) {
         $prev = $c.Trail[$c.Trail.Count - 1]
         if ($prev.Y -ge 0 -and $prev.Y -lt $h) {
-          [void]$sb.Append("$esc[$($prev.Y + 1);$($c.X + 1)H$(Get-BodyAttr)$($prev.Face)$reset")
+          [void]$sb.Append("$esc[$($prev.Y + 1);$($c.X + 1)H$bodyAttr$($prev.Face)$reset")
         }
       }
       if ($c.Y -ge 0 -and $c.Y -lt $h) {
-        [void]$sb.Append("$esc[$($c.Y + 1);$($c.X + 1)H$(Get-HeadAttr)$face$reset")
+        [void]$sb.Append("$esc[$($c.Y + 1);$($c.X + 1)H$headAttr$face$reset")
       }
       $null = $c.Trail.Add([PSCustomObject]@{ Y = $c.Y; Face = $face })
     }
@@ -215,7 +246,7 @@ try {
 }
 catch { Write-Error "catrix stopped on error: $_" }
 finally {
+  try { Clear-Host } catch {}
   Set-Cursor $true
   try { [Console]::ResetColor() } catch {}
-  Write-Host ''
 }
