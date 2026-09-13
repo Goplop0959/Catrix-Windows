@@ -17,7 +17,8 @@ param(
   [int]$Delay = 21,
   [int]$Density = 70,
   [int]$Seconds = 0,
-  [switch]$Update
+  [switch]$Update,
+  [switch]$Diag
 )
 
 $Version = '1.0.0'
@@ -68,6 +69,15 @@ if ($Update) {
   return
 }
 
+if ($Diag) {
+  $raw = $Host.UI.RawUI
+  Write-Host "host=$($Host.Name)"
+  try { Write-Host "window=$($raw.WindowSize.Width)x$($raw.WindowSize.Height) buffer=$($raw.BufferSize.Width)x$($raw.BufferSize.Height)" } catch { Write-Host "size-query-failed: $_" }
+  Write-Host "colors=$($Codes.Count) faces=$($Faces.Count) ansi-test=$esc[32mGREEN$reset"
+  Write-Host 'DIAG-OK'
+  return
+}
+
 if (-not $Codes.ContainsKey($Color)) { Write-Error "unknown color '$Color'"; return }
 if ($Delay -lt 1) { $Delay = 1 }
 if ($Density -gt 100) { $Density = 100 }
@@ -99,6 +109,7 @@ while ($x -lt ($w - 2)) {
   $x += $rng.Next(5, 12)
 }
 
+if ($cols.Count -eq 0) { Write-Warning 'catrix: no rain columns created (check terminal size)'; return }
 $paused = $false
 $started = [DateTime]::UtcNow
 function Set-Pos([int]$x, [int]$y) { try { [Console]::SetCursorPosition($x, $y) } catch {} }
@@ -153,6 +164,7 @@ try {
     Start-Sleep -Milliseconds $Delay
   }
 }
+catch { Write-Error "catrix stopped on error: $_" }
 finally {
   Set-Cursor $true
   try { [Console]::ResetColor() } catch {}
