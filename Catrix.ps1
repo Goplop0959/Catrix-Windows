@@ -61,6 +61,15 @@ $Codes = @{
 }
 $Order = @('green', 'red', 'blue', 'white', 'yellow', 'magenta', 'cyan')
 
+if ($Color -eq 'update') {
+  # `catrix update` positional form (matches the Debian edition).
+  Write-Host 'catrix: updating...'
+  $tmp = Join-Path $env:TEMP 'Catrix-Install.ps1'
+  Invoke-WebRequest -Uri $InstallUrl -OutFile $tmp
+  & $tmp
+  return
+}
+
 if ($Update) {
   Write-Host 'catrix: updating...'
   $tmp = Join-Path $env:TEMP 'Catrix-Install.ps1'
