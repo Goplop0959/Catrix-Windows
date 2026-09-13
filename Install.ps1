@@ -1,4 +1,4 @@
-# Catrix installer for Windows — the supported install method:
+# Catrix installer for Windows - the supported install method:
 #   irm https://raw.githubusercontent.com/Goplop0959/Catrix-Windows/refs/heads/master/Install.ps1 | iex
 #
 # Installs Catrix.ps1 to %LOCALAPPDATA%\Catrix and adds a `catrix` shim
