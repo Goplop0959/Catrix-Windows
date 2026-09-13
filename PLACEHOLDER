@@ -1,0 +1,24 @@
+<#
+.SYNOPSIS
+  Catrix for Windows - Matrix-style falling cat faces. Like cmatrix, but cats.
+.DESCRIPTION
+  Random cat faces rain down the console in columns, default color green.
+  Keys: q quit | space pause | +/- speed | c color | b bold
+  Requires PowerShell 7+ (for UTF-8 faces).
+.EXAMPLE
+  .\Catrix.ps1
+  .\Catrix.ps1 -Color magenta -Delay 50
+  Catrix -Update
+#>
+[CmdletBinding()]
+param(
+  [string]$Color = 'green',
+  [switch]$NoBold,
+  [int]$Delay = 21,
+  [int]$Density = 70,
+  [int]$Seconds = 0,
+  [switch]$Update
+)
+
+$Version = '1.0.0'
+$InstallUrl = 'https://raw.githubusercontent.com/Goplop0959/Catrix-Windows/refs/heads/master/Install.ps1'
