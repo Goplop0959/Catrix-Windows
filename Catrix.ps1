@@ -121,6 +121,44 @@ while ($x -lt ($w - 2)) {
 if ($cols.Count -eq 0) { Write-Warning 'catrix: no rain columns created (check terminal size)'; return }
 $paused = $false
 $script:frame = 0
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class ConIn {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int n);
+  [DllImport("kernel32.dll")] public static extern bool GetNumberOfConsoleInputEvents(IntPtr h, out uint n);
+  [DllImport("kernel32.dll")] public static extern bool PeekConsoleInputW(IntPtr h, [Out] INPUT_RECORD[] buf, uint len, out uint read);
+  [DllImport("kernel32.dll")] public static extern bool ReadConsoleInputW(IntPtr h, [Out] INPUT_RECORD[] buf, uint len, out uint read);
+  [StructLayout(LayoutKind.Explicit)] public struct INPUT_RECORD {
+    [FieldOffset(0)] public ushort EventType;
+    [FieldOffset(4)] public KEY_EVENT Key;
+  }
+  [StructLayout(LayoutKind.Sequential)] public struct KEY_EVENT {
+    public bool bKeyDown; public ushort wRepeatCount, wVirtualKeyCode, wVirtualScanCode;
+    public char UnicodeChar; public uint dwControlKeyState;
+  }
+}
+'@
+function Poll-Key {
+  # Raw peek: returns one key-DOWN record per call, discards mouse/focus/
+  # menu junk that otherwise wedges KeyAvailable forever. Never blocks.
+  try {
+    $h = [ConIn]::GetStdHandle(-10)
+  while ($true) {
+    $n = 0u
+    if (-not [ConIn]::GetNumberOfConsoleInputEvents($h, [ref]$n)) { return $null }
+    if ($n -eq 0) { return $null }
+    $buf = New-Object ConIn+INPUT_RECORD[] 1
+    $r = 0u
+    if (-not [ConIn]::PeekConsoleInputW($h, $buf, 1, [ref]$r)) { return $null }
+    if ($buf[0].EventType -eq 1 -and $buf[0].Key.bKeyDown) {
+      [ConIn]::ReadConsoleInputW($h, $buf, 1, [ref]$r) | Out-Null
+      return $buf[0].Key
+    }
+    [ConIn]::ReadConsoleInputW($h, $buf, 1, [ref]$r) | Out-Null
+  }
+  } catch { return $null }
+}
 $started = [DateTime]::UtcNow
 function Set-Pos([int]$x, [int]$y) { try { [Console]::SetCursorPosition($x, $y) } catch {} }
 function Set-Cursor([bool]$v) { try { [Console]::CursorVisible = $v } catch {} }
@@ -129,10 +167,10 @@ try {
   try { Clear-Host } catch {}
   while ($true) {
     if ($Seconds -gt 0 -and ([DateTime]::UtcNow - $started).TotalSeconds -ge $Seconds) { break }
-    if ($raw.KeyAvailable) {
-      $k = $raw.ReadKey('NoEcho,IncludeKeyDown')
-      $ch = $k.Character
-      if ($k.VirtualKeyCode -eq 27 -or $ch -eq 'q' -or $ch -eq 'Q') { break }
+    $k = Poll-Key
+    if ($k) {
+      $ch = $k.UnicodeChar
+      if ($k.VirtualKeyCode -eq 27 -or $ch -eq 'q' -or $ch -eq 'Q' -or $ch -eq [char]3) { break }
       elseif ($ch -eq ' ') { $paused = -not $paused }
       elseif ($ch -eq '+' -or $ch -eq '=') { $Delay = [Math]::Max(1, $Delay - 5) }
       elseif ($ch -eq '-' -or $ch -eq '_') { $Delay += 5 }
@@ -141,7 +179,6 @@ try {
         $script:code = $Codes[$Order[$ci]]
       }
       elseif ($ch -eq 'b' -or $ch -eq 'B') { $script:boldOn = -not $script:boldOn }
-      elseif ($k.VirtualKeyCode -eq 3) { break }  # Ctrl+C delivered as key
     }
     if ($paused) { Start-Sleep -Milliseconds 50; continue }
     $sb = [Text.StringBuilder]::new(8192)
