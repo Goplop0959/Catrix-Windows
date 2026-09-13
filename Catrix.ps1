@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Catrix for Windows - Matrix-style falling cat faces. Like cmatrix, but cats.
 .DESCRIPTION
